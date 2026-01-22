@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FVN Live Cameras</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .header {
+            background: #1a1a1a;
+            padding: 15px 20px;
+            text-align: center;
+            border-bottom: 2px solid #333;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            height: calc(100vh - 60px);
+            gap: 0;
+        }
+
+        .camera-card {
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .camera-title {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            z-index: 10;
+        }
+
+        .video-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>FVN Live Cameras</h1>
+
+        <div class="grid" id="cameraGrid"></div>
+    </div>
+
+    <div class="single-view" id="singleView">
+        <div class="single-video-container">
+            <button class="close-btn" onclick="closeSingleView()">✕ Close</button>
+            <video id="singleVideo" controls autoplay muted></video>
+        </div>
+    </div>
+
+    <script>
+        const cameras = [
+            {
+                id: 1, name: "Bystranda", url: "https://polarislive-lh.akamaized.net/hls/live/2039438/fvn/jqGugHSmKzQwRw5pMerRL/master.m3u8"
+            },
+            {
+                id: 2, name: "Kristiansand Havn", url: "https://polarislive-lh.akamaized.net/hls/live/2039439/fvn/yJKAuwx5vVRZR46DZsCkE/master.m3u8"
+            },
+            {
+                id: 3, name: "Lindesnes Fyr", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/9wOObU20Nmtsqt8WRITUL/master.m3u8"
+            },
+            {
+                id: 4, name: "Gartnerløkka rundkjøring", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/hzDaPl9KkIbkcZFUvWFfg/master.m3u8"
+            },
+            {
+                id: 5, name: "Varoddbrua", url: "https://polarislive-lh.akamaized.net/hls/live/2039441/fvn/LRIXC23aIKgRVowDr7yhS/master.m3u8"
+            },
+            {
+                id: 6, name: "Torvet", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/jcp1YQkJV7Zb4khPH2q8O/master.m3u8"
+            }
+        ];
+
+
+        const players = {};
+
+        function createCameraCard(camera) {
+            const card = document.createElement('div');
+            card.className = 'camera-card';
+            card.innerHTML = `
+                <div class="camera-header">
+                    <div class="camera-title">${camera.name}</div>
+                </div>
+                <div class="video-container">
+                    <video id="video-${camera.id}" muted></video>
+                </div>
+                <div class="controls">
+                    <button onclick="playStream(${camera.id})">▶ Play</button>
+                    <button onclick="pauseStream(${camera.id})">⏸ Pause</button>
+                    <button onclick="openSingleView(${camera.id})">⛶ Fullscreen</button>
+                    <span class="status loading" id="status-${camera.id}">Loading...</span>
+                </div>
+            `;
+            return card;
+        }
+
+        function initializePlayer(camera) {
+            const video = document.getElementById(`video-${camera.id}`);
+            const status = document.getElementById(`status-${camera.id}`);
+
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90
+                });
+
+                hls.loadSource(camera.url);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                    status.textContent = 'Ready';
+                    status.className = 'status';
+                    playStream(camera.id); // Auto-play after manifest is parsed
+                });
+
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    if (data.fatal) {
+                        status.textContent = 'Error';
+                        status.className = 'status error';
+                    }
+                });
+
+                players[camera.id] = { hls, video };
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari native HLS support
+                video.src = camera.url;
+                video.addEventListener('loadedmetadata', function () {
+                    status.textContent = 'Ready';
+                    status.className = 'status';
+                    playStream(camera.id); // Auto-play after metadata is loaded
+                });
+                players[camera.id] = { video };
+            }
+        }
+
+        function playStream(id) {
+            const player = players[id];
+            if (player && player.video) {
+                player.video.play();
+                document.getElementById(`status-${id}`).textContent = 'Live';
+                document.getElementById(`status-${id}`).className = 'status live';
+            }
+        }
+
+        function pauseStream(id) {
+            const player = players[id];
+            if (player && player.video) {
+                player.video.pause();
+                document.getElementById(`status-${id}`).textContent = 'Paused';
+                document.getElementById(`status-${id}`).className = 'status';
+            }
+        }
+
+        function openSingleView(id) {
+            const camera = cameras.find(c => c.id === id);
+            const singleVideo = document.getElementById('singleVideo');
+            const singleView = document.getElementById('singleView');
+
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(camera.url);
+                hls.attachMedia(singleVideo);
+                hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                    singleVideo.play();
+                });
+            } else if (singleVideo.canPlayType('application/vnd.apple.mpegurl')) {
+                singleVideo.src = camera.url;
+                singleVideo.play();
+            }
+
+            singleView.classList.add('active');
+        }
+
+        function closeSingleView() {
+            const singleView = document.getElementById('singleView');
+            const singleVideo = document.getElementById('singleVideo');
+            singleVideo.pause();
+            singleVideo.src = '';
+            singleView.classList.remove('active');
+        }
+
+        // Initialize all cameras
+        const grid = document.getElementById('cameraGrid');
+        cameras.forEach(camera => {
+            const card = createCameraCard(camera);
+            grid.appendChild(card);
+            initializePlayer(camera);
+        });
+    </script>
+</body>
+
+</html>
