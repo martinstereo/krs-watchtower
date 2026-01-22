@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Krs Live Cameras</title>
+    <title>Kristiansand Live</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * {
@@ -14,224 +14,160 @@
         }
 
         body {
-            font-family: 'Times New Roman', Times, serif;
             background: #000;
             color: #fff;
-            overflow: hidden;
+            font-family: system-ui;
             height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
-        .header {
-            background: #1a1a1a;
-            padding: 10px;
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            border-bottom: 2px solid #333;
+        header {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 20px;
+            background: #000000;
         }
 
-        h1 {
-            grid-column: 2;
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #fff;
-            letter-spacing: 2px;
-        }
-
-        .live-timer {
-            grid-column: 3;
-            justify-self: end;
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #fff;
-            padding-right: 20px;
+        h1,
+        #clock {
+            font-size: 1.5rem;
         }
 
         .grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(2, 1fr);
-            flex-grow: 1;
-            gap: 5px;
-            padding: 5px;
-            background: #111;
+            gap: 2px;
+            padding: 4px;
+            overflow-y: auto;
         }
 
-        .camera-card {
+        .cam {
             position: relative;
-            background: #000;
-            border: 1px solid #222;
+            background: #111;
+            cursor: pointer;
+            aspect-ratio: 16/9;
         }
 
-        .camera-title {
+        .cam span {
             position: absolute;
-            top: 15px;
+            top: 10px;
             left: 50%;
             transform: translateX(-50%);
-
-            background: rgba(0, 0, 0, 0.5);
-            padding: 8px 15px;
-            border-radius: 4px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            z-index: 10;
+            background: rgba(0, 0, 0, .6);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: .9rem;
             white-space: nowrap;
         }
 
-        video {
+        .cam video {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
         }
 
-        .status {
-            position: absolute;
-            bottom: 15px;
-            right: 15px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            color: #ff4444;
-        }
-
-        .status.live {
-            color: #00ff00;
-        }
-
-        #singleView {
+        #modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             background: #000;
-            z-index: 1000;
-        }
-
-        #singleView.active {
-            display: flex;
+            z-index: 100;
             flex-direction: column;
         }
 
-        .close-btn {
-            background: #fff;
-            color: #000;
-            border: none;
-            padding: 10px 20px;
-            font-weight: bold;
-            font-family: 'Times New Roman', Times, serif;
-            /* Match button font too */
-            cursor: pointer;
+        #modal.open {
+            display: flex;
+        }
+
+        #modal button {
             align-self: flex-end;
             margin: 10px;
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+
+        #modal video {
+            flex: 1;
+            object-fit: contain;
+        }
+
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1,
+            #clock {
+                font-size: 1rem;
+            }
+
+            .cam span {
+                font-size: .75rem;
+                padding: 3px 6px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <header class="header">
-        <div></div>
+    <header>
         <h1>Kristiansand Live</h1>
-        <div id="clock" class="live-timer">00:00:00</div>
+        <div id="clock"></div>
     </header>
-
-    <div class="grid" id="cameraGrid"></div>
-
-    <div id="singleView">
-        <button class="close-btn" onclick="closeSingleView()">CLOSE [X]</button>
-        <video id="singleVideo" controls autoplay muted></video>
+    <div class="grid" id="grid"></div>
+    <div id="modal">
+        <button onclick="closeModal()">✕ Close</button>
+        <video id="modalVideo" controls autoplay muted></video>
     </div>
-
     <script>
-        // --- Timer Logic ---
-        function updateClock() {
-            const options = {
-                timeZone: 'Europe/Oslo',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            };
-            document.getElementById('clock').textContent =
-                new Intl.DateTimeFormat('en-GB', options).format(new Date());
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
-
-        // --- Camera Setup ---
         const cameras = [
-            { id: 1, name: "Bystranda", url: "https://polarislive-lh.akamaized.net/hls/live/2039438/fvn/jqGugHSmKzQwRw5pMerRL/master.m3u8" },
-            { id: 2, name: "Kristiansand Havn", url: "https://polarislive-lh.akamaized.net/hls/live/2039439/fvn/yJKAuwx5vVRZR46DZsCkE/master.m3u8" },
-            { id: 3, name: "Lindesnes Fyr", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/9wOObU20Nmtsqt8WRITUL/master.m3u8" },
-            { id: 4, name: "Gartnerløkka", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/hzDaPl9KkIbkcZFUvWFfg/master.m3u8" },
-            { id: 5, name: "Varoddbrua", url: "https://polarislive-lh.akamaized.net/hls/live/2039441/fvn/LRIXC23aIKgRVowDr7yhS/master.m3u8" },
-            { id: 6, name: "Torvet", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/jcp1YQkJV7Zb4khPH2q8O/master.m3u8" }
+            { name: "Bystranda", url: "https://polarislive-lh.akamaized.net/hls/live/2039438/fvn/jqGugHSmKzQwRw5pMerRL/master.m3u8" },
+            { name: "Kristiansand Havn", url: "https://polarislive-lh.akamaized.net/hls/live/2039439/fvn/yJKAuwx5vVRZR46DZsCkE/master.m3u8" },
+            { name: "Lindesnes Fyr", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/9wOObU20Nmtsqt8WRITUL/master.m3u8" },
+            { name: "Gartnerløkka", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/hzDaPl9KkIbkcZFUvWFfg/master.m3u8" },
+            { name: "Varoddbrua", url: "https://polarislive-lh.akamaized.net/hls/live/2039441/fvn/LRIXC23aIKgRVowDr7yhS/master.m3u8" },
+            { name: "Torvet", url: "https://polarislive-lh.akamaized.net/hls/live/2039440/fvn/jcp1YQkJV7Zb4khPH2q8O/master.m3u8" }
         ];
 
-        const players = {};
+        let modalHls;
 
-        function createCameraCard(camera) {
-            const card = document.createElement('div');
-            card.className = 'camera-card';
-            card.onclick = () => openSingleView(camera.id);
-            card.innerHTML = `
-                <div class="camera-title">${camera.name}</div>
-                <video id="video-${camera.id}" muted playsinline></video>
-                <div class="status" id="status-${camera.id}">● OFFLINE</div>
-            `;
-            return card;
-        }
-
-        function initializePlayer(camera) {
-            const video = document.getElementById(`video-${camera.id}`);
-            const status = document.getElementById(`status-${camera.id}`);
-
+        function playHls(video, url) {
             if (Hls.isSupported()) {
                 const hls = new Hls();
-                hls.loadSource(camera.url);
+                hls.loadSource(url);
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play();
-                    status.textContent = '● LIVE';
-                    status.classList.add('live');
-                });
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = camera.url;
-                video.addEventListener('loadedmetadata', () => {
-                    video.play();
-                    status.textContent = '● LIVE';
-                    status.classList.add('live');
-                });
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+                return hls;
             }
+            video.src = url;
+            video.play();
         }
 
-        function openSingleView(id) {
-            const camera = cameras.find(c => c.id === id);
-            const singleVideo = document.getElementById('singleVideo');
-            const singleView = document.getElementById('singleView');
-
-            if (Hls.isSupported()) {
-                const hls = new Hls();
-                hls.loadSource(camera.url);
-                hls.attachMedia(singleVideo);
-            } else {
-                singleVideo.src = camera.url;
-            }
-            singleView.classList.add('active');
-        }
-
-        function closeSingleView() {
-            document.getElementById('singleView').classList.remove('active');
-            document.getElementById('singleVideo').pause();
-        }
-
-        const grid = document.getElementById('cameraGrid');
-        cameras.forEach(camera => {
-            grid.appendChild(createCameraCard(camera));
-            initializePlayer(camera);
+        cameras.forEach(cam => {
+            const div = document.createElement('div');
+            div.className = 'cam';
+            div.innerHTML = `<span>${cam.name}</span><video muted playsinline></video>`;
+            div.onclick = () => openModal(cam.url);
+            grid.appendChild(div);
+            playHls(div.querySelector('video'), cam.url);
         });
+
+        function openModal(url) {
+            if (modalHls) modalHls.destroy();
+            modalHls = playHls(modalVideo, url);
+            modal.classList.add('open');
+        }
+
+        function closeModal() {
+            modal.classList.remove('open');
+            modalVideo.pause();
+            if (modalHls) { modalHls.destroy(); modalHls = null; }
+        }
+
+        setInterval(() => {
+            clock.textContent = new Date().toLocaleTimeString('no-NO', { timeZone: 'Europe/Oslo' }) + ' CET';
+        }, 1000);
     </script>
 </body>
 
